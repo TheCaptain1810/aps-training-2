@@ -1,7 +1,16 @@
+/**
+ * @fileoverview Main application file for the Autodesk Platform Services (APS) Simple Viewer.
+ * Handles bucket management, model uploading, and viewer initialization.
+ */
+
 import { initViewer, loadModel } from "./viewer.js";
 
+/**
+ * Initialize the application when the DOM is loaded.
+ * Sets up the viewer and initializes all UI components.
+ */
 initViewer(document.getElementById("preview")).then((viewer) => {
-  window.viewer = viewer;
+  window.viewer = viewer; // Store viewer globally for delete function access
   const urn = window.location.hash?.substring(1);
   setUpBucketSelection(viewer, urn);
   setupModelSelection(viewer, urn);
@@ -9,6 +18,14 @@ initViewer(document.getElementById("preview")).then((viewer) => {
   setupBucketCreation(viewer);
 });
 
+/**
+ * Sets up the bucket selection dropdown with available buckets.
+ * Populates the dropdown with buckets from the server and handles selection state.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @param {string} [selectedUrn] - The URN of the bucket to pre-select
+ * @returns {Promise<void>}
+ */
 async function setUpBucketSelection(viewer, selectedUrn) {
   const dropdownContainer = document.getElementById("buckets");
   const dropdownOptions = document.getElementById("bucket-options");
@@ -69,6 +86,14 @@ async function setUpBucketSelection(viewer, selectedUrn) {
   }
 }
 
+/**
+ * Sets up the model selection dropdown with available models.
+ * Populates the dropdown with models from the default bucket.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @param {string} [selectedUrn] - The URN of the model to pre-select
+ * @returns {Promise<void>}
+ */
 async function setupModelSelection(viewer, selectedUrn) {
   const dropdown = document.getElementById("models");
   dropdown.innerHTML = "";
@@ -96,6 +121,13 @@ async function setupModelSelection(viewer, selectedUrn) {
   }
 }
 
+/**
+ * Sets up bucket creation functionality.
+ * Handles the create bucket button click event and form submission.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @returns {Promise<void>}
+ */
 async function setupBucketCreation(viewer) {
   const create = document.getElementById("create");
   const input = document.getElementById("bucket");
@@ -139,6 +171,13 @@ async function setupBucketCreation(viewer) {
   };
 }
 
+/**
+ * Sets up model upload functionality.
+ * Handles file selection, validation, and upload to the selected bucket.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @returns {Promise<void>}
+ */
 async function setupModelUpload(viewer) {
   const upload = document.getElementById("upload");
   const input = document.getElementById("input");
@@ -212,6 +251,14 @@ async function setupModelUpload(viewer) {
   };
 }
 
+/**
+ * Handles bucket selection and updates the models dropdown.
+ * Fetches and displays models from the selected bucket.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @param {string} bucketUrn - The URN of the selected bucket
+ * @returns {Promise<void>}
+ */
 async function onBucketSelected(viewer, bucketUrn) {
   try {
     const resp = await fetch(
@@ -242,6 +289,14 @@ async function onBucketSelected(viewer, bucketUrn) {
   }
 }
 
+/**
+ * Handles model selection and loading.
+ * Checks translation status and loads the model in the viewer when ready.
+ *
+ * @param {Object} viewer - The Autodesk Viewer instance
+ * @param {string} urn - The URN of the selected model
+ * @returns {Promise<void>}
+ */
 async function onModelSelected(viewer, urn) {
   if (window.onModelSelectedTimeout) {
     clearTimeout(window.onModelSelectedTimeout);
@@ -285,18 +340,35 @@ async function onModelSelected(viewer, urn) {
   }
 }
 
+/**
+ * Displays a notification message to the user.
+ * Shows an overlay with the specified message.
+ *
+ * @param {string} message - The HTML message to display
+ */
 function showNotification(message) {
   const overlay = document.getElementById("overlay");
   overlay.innerHTML = `<div class="notification">${message}</div>`;
   overlay.style.display = "flex";
 }
 
+/**
+ * Clears the notification overlay.
+ * Hides the notification message from the user.
+ */
 function clearNotification() {
   const overlay = document.getElementById("overlay");
   overlay.innerHTML = "";
   overlay.style.display = "none";
 }
 
+/**
+ * Deletes a bucket after user confirmation.
+ * Handles the deletion process and updates the UI accordingly.
+ *
+ * @param {string} bucketName - The name of the bucket to delete
+ * @returns {Promise<void>}
+ */
 async function deleteBucket(bucketName) {
   if (
     !confirm(
@@ -335,6 +407,10 @@ async function deleteBucket(bucketName) {
   }
 }
 
+/**
+ * Toggles the dropdown open/closed state.
+ * Manages the dropdown visibility and ARIA attributes.
+ */
 function toggleDropdown() {
   const dropdown = document.getElementById("buckets");
   const dropdownSelected = dropdown.querySelector(".dropdown-selected");
@@ -347,6 +423,13 @@ function toggleDropdown() {
   dropdownSelected.setAttribute("aria-expanded", !isOpen);
 }
 
+/**
+ * Handles bucket selection from the dropdown.
+ * Updates the selected bucket and triggers bucket-specific actions.
+ *
+ * @param {string} urn - The URN of the selected bucket
+ * @param {string} name - The display name of the selected bucket
+ */
 function selectBucket(urn, name) {
   console.log("Select bucket called:", name, urn);
   const dropdown = document.getElementById("buckets");
@@ -370,6 +453,12 @@ function selectBucket(urn, name) {
   onBucketSelected(window.viewer, urn);
 }
 
+/**
+ * Handles keyboard events for the dropdown.
+ * Provides keyboard accessibility for dropdown interaction.
+ *
+ * @param {KeyboardEvent} event - The keyboard event
+ */
 function handleDropdownKeydown(event) {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
@@ -382,11 +471,16 @@ function handleDropdownKeydown(event) {
   }
 }
 
+// Make functions globally accessible for HTML onclick handlers
 window.toggleDropdown = toggleDropdown;
 window.selectBucket = selectBucket;
 window.handleDropdownKeydown = handleDropdownKeydown;
 window.deleteBucket = deleteBucket;
 
+/**
+ * Close dropdown when clicking outside of it.
+ * Provides click-away functionality for better UX.
+ */
 document.addEventListener("click", function (event) {
   const dropdown = document.getElementById("buckets");
   if (dropdown && !dropdown.contains(event.target)) {

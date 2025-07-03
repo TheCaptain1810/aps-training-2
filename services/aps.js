@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Autodesk Platform Services (APS) integration module.
+ * Provides functions for authentication, bucket management, object storage, and model translation.
+ */
+
 const { AuthenticationClient, Scopes } = require("@aps_sdk/authentication");
 const { OssClient, Region, PolicyKey } = require("@aps_sdk/oss");
 const {
@@ -7,14 +12,22 @@ const {
 } = require("@aps_sdk/model-derivative");
 const { APS_CLIENT_ID, APS_CLIENT_SECRET } = require("../config.js");
 
+/** @constant {string} Default bucket name for the application */
 const APS_BUCKET = `the-captain-basic-app`;
 
 const authenticationClient = new AuthenticationClient();
 const ossClient = new OssClient();
 const modelDerivativeClient = new ModelDerivativeClient();
 
+/** @namespace service - Exported service functions */
 const service = (module.exports = {});
 
+/**
+ * Retrieves an internal access token for server-to-server authentication.
+ * Includes comprehensive scopes for bucket and data operations.
+ *
+ * @returns {Promise<string>} The access token
+ */
 async function getInternalToken() {
   const credentials = await authenticationClient.getTwoLeggedToken(
     APS_CLIENT_ID,
@@ -32,6 +45,12 @@ async function getInternalToken() {
   return credentials.access_token;
 }
 
+/**
+ * Retrieves a viewer token for client-side authentication.
+ * Used by the frontend viewer for accessing viewable content.
+ *
+ * @returns {Promise<Object>} Token object with access_token and expires_in
+ */
 service.getViewerToken = async () => {
   return await authenticationClient.getTwoLeggedToken(
     APS_CLIENT_ID,
@@ -40,6 +59,14 @@ service.getViewerToken = async () => {
   );
 };
 
+/**
+ * Ensures that a bucket exists, creating it if necessary.
+ * Checks for bucket existence and creates with persistent policy if not found.
+ *
+ * @param {string} bucketKey - The key/name of the bucket
+ * @returns {Promise<void>}
+ * @throws {Error} If bucket creation fails for reasons other than 404
+ */
 service.ensureBucketExists = async (bucketKey) => {
   const accessToken = await getInternalToken();
   try {
@@ -57,6 +84,12 @@ service.ensureBucketExists = async (bucketKey) => {
   }
 };
 
+/**
+ * Lists all buckets accessible to the current application.
+ * Handles pagination to retrieve all available buckets.
+ *
+ * @returns {Promise<Array<Object>>} Array of bucket objects
+ */
 service.listBuckets = async () => {
   const accessToken = await getInternalToken();
   let response = await ossClient.getBuckets({
@@ -77,6 +110,13 @@ service.listBuckets = async () => {
   return buckets;
 };
 
+/**
+ * Lists all objects in a specified bucket.
+ * Handles pagination to retrieve all objects and ensures bucket exists.
+ *
+ * @param {string} [bucketKey=APS_BUCKET] - The bucket key to list objects from
+ * @returns {Promise<Array<Object>>} Array of object metadata
+ */
 service.listObjects = async (bucketKey = APS_BUCKET) => {
   await service.ensureBucketExists(bucketKey);
   const accessToken = await getInternalToken();
@@ -100,7 +140,6 @@ service.listObjects = async (bucketKey = APS_BUCKET) => {
 service.createBucket = async (bucketName) => {
   const accessToken = await getInternalToken();
 
-  // Use the bucket name as provided - validation should be done at the route level
   try {
     const bucket = await ossClient.createBucket(
       Region.Us,
@@ -109,12 +148,9 @@ service.createBucket = async (bucketName) => {
     );
     return bucket;
   } catch (error) {
-    // If bucket already exists, provide detailed information
     if (error.axiosError?.response?.status === 409) {
-      // Check if the bucket actually exists or if it's just a naming conflict
       try {
         await ossClient.getBucketDetails(bucketName, { accessToken });
-        // Bucket exists and is accessible
         const conflictError = new Error(
           `Bucket name '${bucketName}' already exists and is accessible. Please choose a different name.`
         );
@@ -122,21 +158,18 @@ service.createBucket = async (bucketName) => {
         throw conflictError;
       } catch (detailError) {
         if (detailError.axiosError?.response?.status === 404) {
-          // Bucket doesn't exist but name is still reserved (recently deleted)
           const reservedError = new Error(
             `Bucket name '${bucketName}' was recently deleted and is temporarily unavailable. Please wait a few minutes and try again, or choose a different name.`
           );
           reservedError.status = 409;
           throw reservedError;
         } else if (detailError.axiosError?.response?.status === 403) {
-          // Bucket exists but belongs to another app/user
           const accessError = new Error(
             `Bucket name '${bucketName}' is already in use by another application or user. Please choose a different name.`
           );
           accessError.status = 409;
           throw accessError;
         } else {
-          // Some other error occurred while checking bucket details
           const unknownError = new Error(
             `Bucket name '${bucketName}' conflicts with an existing bucket. Please choose a different name.`
           );
@@ -200,7 +233,6 @@ service.getManifest = async (urn) => {
 service.urnify = (id) => Buffer.from(id).toString("base64").replace(/=/g, "");
 
 service.deurnify = (urn) => {
-  // Add padding if needed for proper base64 decoding
   const paddedUrn = urn + "=".repeat((4 - (urn.length % 4)) % 4);
   return Buffer.from(paddedUrn, "base64").toString();
 };
@@ -209,10 +241,8 @@ service.deleteBucket = async (bucketName) => {
   const accessToken = await getInternalToken();
 
   try {
-    // Try to get and delete all objects in the bucket first
     await clearBucketObjects(bucketName, accessToken);
 
-    // Now try to delete the empty bucket
     console.log(`Attempting to delete bucket: ${bucketName}`);
     await ossClient.deleteBucket(bucketName, { accessToken });
     return {
@@ -230,7 +260,6 @@ service.deleteBucket = async (bucketName) => {
   }
 };
 
-// Helper function to clear all objects from a bucket
 async function clearBucketObjects(bucketName, accessToken) {
   try {
     const objects = await ossClient.getObjects(bucketName, { accessToken });
@@ -261,7 +290,6 @@ async function clearBucketObjects(bucketName, accessToken) {
   }
 }
 
-// Helper function to handle deletion errors
 function handleDeletionError(error, bucketName) {
   const status = error.axiosError?.response?.status;
 
@@ -302,16 +330,4 @@ function handleDeletionError(error, bucketName) {
   );
   genericError.status = status || 500;
   throw genericError;
-}
-
-// Helper function to suggest alternative bucket names
-function suggestAlternativeBucketName(originalName) {
-  const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
-  const alternatives = [
-    `${originalName}-${timestamp}`,
-    `${originalName}-v2`,
-    `${originalName}-new`,
-    `${originalName}-${Math.floor(Math.random() * 1000)}`,
-  ];
-  return alternatives;
 }
