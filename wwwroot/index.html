@@ -27,10 +27,37 @@
       <span class="title">Simple Viewer</span>
       <input type="text" placeholder="Enter the bucket name" id="bucket" />
       <button id="create" title="Create Bucket">Create Bucket</button>
-      <select name="buckets" id="buckets"></select>
+      <div id="buckets" class="custom-dropdown">
+        <div
+          class="dropdown-selected"
+          onclick="toggleDropdown()"
+          onkeydown="handleDropdownKeydown(event)"
+          tabindex="0"
+          role="button"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-controls="bucket-options"
+          aria-label="Select bucket"
+        >
+          <span class="selected-text">Select a bucket...</span>
+          <span class="dropdown-arrow">▼</span>
+        </div>
+        <div
+          id="bucket-options"
+          class="dropdown-options"
+          role="listbox"
+          aria-label="Bucket options"
+        ></div>
+      </div>
       <button id="upload" title="Upload New Model">Upload Model</button>
       <input style="display: none" type="file" id="input" />
       <select name="models" id="models"></select>
+    </div>
+    <div id="help-text" class="help-text">
+      <small
+        >Note: You can only delete buckets that were created by this
+        application. Buckets from other apps cannot be deleted.</small
+      >
     </div>
     <div id="preview"></div>
     <div id="overlay"></div>

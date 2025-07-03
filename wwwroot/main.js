@@ -1,6 +1,7 @@
 import { initViewer, loadModel } from "./viewer.js";
 
 initViewer(document.getElementById("preview")).then((viewer) => {
+  window.viewer = viewer; // Store viewer globally for delete function access
   const urn = window.location.hash?.substring(1);
   setUpBucketSelection(viewer, urn);
   setupModelUpload(viewer);
@@ -8,27 +9,59 @@ initViewer(document.getElementById("preview")).then((viewer) => {
 });
 
 async function setUpBucketSelection(viewer, selectedUrn) {
-  const dropdown = document.getElementById("buckets");
-  dropdown.innerHTML = "";
+  const dropdownContainer = document.getElementById("buckets");
+  const dropdownOptions = document.getElementById("bucket-options");
+  const selectedText = dropdownContainer.querySelector(".selected-text");
+
+  dropdownOptions.innerHTML = "";
+
   try {
     const resp = await fetch("/api/buckets");
     if (!resp.ok) {
       throw new Error(await resp.text());
     }
     const buckets = await resp.json();
-    dropdown.innerHTML = buckets
+
+    // Update selected text
+    if (buckets.length === 0) {
+      selectedText.textContent = "No buckets available";
+      return;
+    }
+
+    // Create dropdown options with delete buttons
+    dropdownOptions.innerHTML = buckets
       .map(
         (bucket) =>
-          `<option value=${bucket.urn} ${
+          `<div class="dropdown-option ${
             bucket.urn === selectedUrn ? "selected" : ""
-          }>${bucket.name}</option>`
+          }" data-urn="${bucket.urn}" onclick="selectBucket('${bucket.urn}', '${
+            bucket.name
+          }')" role="option" tabindex="-1">
+            <span class="option-name">${bucket.name}</span>
+            <button class="delete-btn" onclick="event.stopPropagation(); deleteBucket('${
+              bucket.name
+            }')" title="Delete bucket (Note: Only buckets created by this app can be deleted)" aria-label="Delete bucket ${
+            bucket.name
+          }">×</button>
+          </div>`
       )
       .join("\n");
-    dropdown.onchange = () => onBucketSelected(viewer, dropdown.value);
-    if (dropdown.value) {
-      onBucketSelected(viewer, dropdown.value);
+
+    // Set selected text
+    const selectedBucket = buckets.find((b) => b.urn === selectedUrn);
+    if (selectedBucket) {
+      selectedText.textContent = selectedBucket.name;
+      onBucketSelected(viewer, selectedUrn);
+    } else if (buckets.length > 0) {
+      // Auto-select first bucket if no selection
+      const firstBucket = buckets[0];
+      selectedText.textContent = firstBucket.name;
+      onBucketSelected(viewer, firstBucket.urn);
+    } else {
+      selectedText.textContent = "Select a bucket...";
     }
   } catch (err) {
+    selectedText.textContent = "Error loading buckets";
     alert("Could not list buckets. See the console for more details.");
     console.error(err);
   }
@@ -74,11 +107,12 @@ async function setupBucketCreation(viewer) {
     }
 
     create.setAttribute("disabled", "true");
-    buckets.setAttribute("disabled", "true");
+    // Disable dropdown by adding a disabled class instead of attribute
+    buckets.classList.add("disabled");
     showNotification(`Creating bucket <em>${bucketName}</em>. Please wait...`);
 
     try {
-      const resp = await fetch("/api/buckets", {
+      const resp = await fetch("/api/buckets/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -101,7 +135,7 @@ async function setupBucketCreation(viewer) {
     } finally {
       clearNotification();
       create.removeAttribute("disabled");
-      buckets.removeAttribute("disabled");
+      buckets.classList.remove("disabled");
     }
   };
 }
@@ -135,8 +169,19 @@ async function setupModelUpload(viewer) {
       const model = await resp.json();
       // Refresh the currently selected bucket to show the new model
       const bucketsDropdown = document.getElementById("buckets");
-      if (bucketsDropdown.value) {
-        onBucketSelected(viewer, bucketsDropdown.value);
+      const selectedText = bucketsDropdown.querySelector(".selected-text");
+      if (
+        selectedText &&
+        selectedText.textContent !== "Select a bucket..." &&
+        selectedText.textContent !== "No buckets available"
+      ) {
+        // Get the current selected bucket URN and refresh it
+        const selectedOption = bucketsDropdown.querySelector(
+          ".dropdown-option.selected"
+        );
+        if (selectedOption) {
+          onBucketSelected(viewer, selectedOption.dataset.urn);
+        }
       } else {
         setupModelSelection(viewer, model.urn);
       }
@@ -241,3 +286,125 @@ function clearNotification() {
   overlay.innerHTML = "";
   overlay.style.display = "none";
 }
+
+async function deleteBucket(bucketName) {
+  if (
+    !confirm(
+      `Are you sure you want to delete bucket "${bucketName}"?\n\nNote: You can only delete buckets that you created with this app. Buckets created by other applications or users cannot be deleted.\n\nThis action cannot be undone.`
+    )
+  ) {
+    return;
+  }
+
+  try {
+    showNotification(`Deleting bucket <em>${bucketName}</em>...`);
+
+    const resp = await fetch("/api/buckets", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ bucketName: bucketName }),
+    });
+
+    if (!resp.ok) {
+      const errorMessage = await resp.text();
+      throw new Error(errorMessage);
+    }
+
+    // Refresh the bucket list after successful deletion
+    const viewer = window.viewer; // Assuming viewer is accessible globally
+    setUpBucketSelection(viewer);
+
+    clearNotification();
+    showNotification(`Bucket "${bucketName}" deleted successfully.`);
+    setTimeout(clearNotification, 3000);
+  } catch (err) {
+    clearNotification();
+
+    // Show more user-friendly error messages based on the error type
+    let userMessage = `Could not delete bucket "${bucketName}".`;
+
+    if (err.message.includes("Permission denied")) {
+      userMessage +=
+        "\n\nThis bucket was likely created by another application or user. You can only delete buckets that you created with this app.";
+    } else if (err.message.includes("not empty")) {
+      userMessage +=
+        "\n\nThe bucket contains objects that need to be deleted first.";
+    } else if (err.message.includes("not found")) {
+      userMessage += "\n\nThe bucket no longer exists.";
+    } else {
+      userMessage += `\n\nError: ${err.message}`;
+    }
+
+    alert(userMessage);
+    console.error("Bucket deletion error:", err);
+  }
+}
+
+function toggleDropdown() {
+  const dropdown = document.getElementById("buckets");
+  const dropdownSelected = dropdown.querySelector(".dropdown-selected");
+  const isOpen = dropdown.classList.contains("open");
+
+  console.log("Toggle dropdown called, current state:", isOpen);
+
+  dropdown.classList.toggle("open");
+
+  // Update aria-expanded attribute
+  dropdownSelected.setAttribute("aria-expanded", !isOpen);
+}
+
+function selectBucket(urn, name) {
+  console.log("Select bucket called:", name, urn);
+  const dropdown = document.getElementById("buckets");
+  const dropdownSelected = dropdown.querySelector(".dropdown-selected");
+  const selectedText = dropdown.querySelector(".selected-text");
+  const options = dropdown.querySelectorAll(".dropdown-option");
+
+  // Update selected text
+  selectedText.textContent = name;
+
+  // Update selected option
+  options.forEach((option) => {
+    option.classList.remove("selected");
+    if (option.dataset.urn === urn) {
+      option.classList.add("selected");
+    }
+  });
+
+  // Close dropdown
+  dropdown.classList.remove("open");
+  dropdownSelected.setAttribute("aria-expanded", "false");
+
+  // Trigger bucket selection
+  onBucketSelected(window.viewer, urn);
+}
+
+function handleDropdownKeydown(event) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    toggleDropdown();
+  } else if (event.key === "Escape") {
+    const dropdown = document.getElementById("buckets");
+    const dropdownSelected = dropdown.querySelector(".dropdown-selected");
+    dropdown.classList.remove("open");
+    dropdownSelected.setAttribute("aria-expanded", "false");
+  }
+}
+
+// Make functions globally accessible for HTML onclick handlers
+window.toggleDropdown = toggleDropdown;
+window.selectBucket = selectBucket;
+window.handleDropdownKeydown = handleDropdownKeydown;
+window.deleteBucket = deleteBucket;
+
+// Close dropdown when clicking outside
+document.addEventListener("click", function (event) {
+  const dropdown = document.getElementById("buckets");
+  if (dropdown && !dropdown.contains(event.target)) {
+    const dropdownSelected = dropdown.querySelector(".dropdown-selected");
+    dropdown.classList.remove("open");
+    dropdownSelected.setAttribute("aria-expanded", "false");
+  }
+});

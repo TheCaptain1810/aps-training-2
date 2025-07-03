@@ -25,6 +25,8 @@ async function getInternalToken() {
       Scopes.DataWrite,
       Scopes.BucketCreate,
       Scopes.BucketRead,
+      Scopes.BucketDelete,
+      Scopes.BucketUpdate,
     ]
   );
   return credentials.access_token;
@@ -168,3 +170,102 @@ service.getManifest = async (urn) => {
 };
 
 service.urnify = (id) => Buffer.from(id).toString("base64").replace(/=/g, "");
+
+service.deleteBucket = async (bucketName) => {
+  const accessToken = await getInternalToken();
+
+  try {
+    // Try to get and delete all objects in the bucket first
+    await clearBucketObjects(bucketName, accessToken);
+
+    // Now try to delete the empty bucket
+    console.log(`Attempting to delete bucket: ${bucketName}`);
+    await ossClient.deleteBucket(bucketName, { accessToken });
+    return {
+      success: true,
+      message: `Bucket '${bucketName}' deleted successfully.`,
+    };
+  } catch (error) {
+    console.error("Bucket deletion error:", {
+      status: error.axiosError?.response?.status,
+      statusText: error.axiosError?.response?.statusText,
+      data: error.axiosError?.response?.data,
+    });
+
+    return handleDeletionError(error, bucketName);
+  }
+};
+
+// Helper function to clear all objects from a bucket
+async function clearBucketObjects(bucketName, accessToken) {
+  try {
+    const objects = await ossClient.getObjects(bucketName, { accessToken });
+
+    if (objects.body?.items?.length > 0) {
+      console.log(
+        `Found ${objects.body.items.length} objects in bucket ${bucketName}`
+      );
+
+      for (const object of objects.body.items) {
+        try {
+          console.log(`Deleting object: ${object.objectKey}`);
+          await ossClient.deleteObject(bucketName, object.objectKey, {
+            accessToken,
+          });
+        } catch (objError) {
+          console.error(
+            `Failed to delete object ${object.objectKey}:`,
+            objError.message
+          );
+        }
+      }
+    } else {
+      console.log(`Bucket ${bucketName} appears to be empty`);
+    }
+  } catch (listError) {
+    console.warn("Could not list bucket objects:", listError.message);
+  }
+}
+
+// Helper function to handle deletion errors
+function handleDeletionError(error, bucketName) {
+  const status = error.axiosError?.response?.status;
+
+  if (status === 404) {
+    const notFoundError = new Error(`Bucket '${bucketName}' not found.`);
+    notFoundError.status = 404;
+    throw notFoundError;
+  }
+
+  if (status === 403) {
+    let message = `Permission denied. Cannot delete bucket '${bucketName}'. `;
+    const errorData = error.axiosError?.response?.data;
+
+    if (errorData?.reason === "Bucket owner mismatch") {
+      message += "This bucket was created by a different application or user.";
+    } else if (errorData?.errorCode === "AUTH-003") {
+      message += "Your access token doesn't have sufficient permissions.";
+    } else {
+      message +=
+        "Common causes: 1) Bucket created by another app, 2) Missing delete permissions, 3) Hidden objects exist.";
+    }
+
+    const forbiddenError = new Error(message);
+    forbiddenError.status = 403;
+    throw forbiddenError;
+  }
+
+  if (status === 409) {
+    const conflictError = new Error(
+      `Bucket '${bucketName}' is not empty or has active operations.`
+    );
+    conflictError.status = 409;
+    throw conflictError;
+  }
+
+  const genericError = new Error(
+    `Failed to delete bucket '${bucketName}': ${error.message}`
+  );
+  genericError.status = status || 500;
+  throw genericError;
+}

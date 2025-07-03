@@ -1,5 +1,10 @@
 const express = require("express");
-const { listBuckets, createBucket, urnify } = require("../services/aps.js");
+const {
+  listBuckets,
+  createBucket,
+  deleteBucket,
+  urnify,
+} = require("../services/aps.js");
 
 let router = express.Router();
 
@@ -17,7 +22,7 @@ router.get("/api/buckets", async (req, res, next) => {
   }
 });
 
-router.post("/api/buckets", async (req, res, next) => {
+router.post("/api/buckets/create", async (req, res, next) => {
   try {
     const { bucketName } = req.body;
     if (!bucketName) {
@@ -56,6 +61,42 @@ router.post("/api/buckets", async (req, res, next) => {
     });
   } catch (error) {
     // Handle bucket name conflicts with a user-friendly message
+    if (error.status === 409) {
+      res.status(409).send(error.message);
+      return;
+    }
+    next(error);
+  }
+});
+
+router.delete("/api/buckets", async (req, res, next) => {
+  try {
+    const { bucketName } = req.body;
+    if (!bucketName) {
+      res.status(400).send("Bucket name is required.");
+      return;
+    }
+
+    // Use the user's bucket name with minimal sanitization for APS requirements
+    let sanitizedBucketName = bucketName
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "") // Remove invalid characters
+      .replace(/^[^a-z0-9]+/, "") // Remove leading non-alphanumeric
+      .replace(/[^a-z0-9]+$/, ""); // Remove trailing non-alphanumeric
+
+    const result = await deleteBucket(sanitizedBucketName);
+
+    res.json(result);
+  } catch (error) {
+    // Handle specific error statuses with user-friendly messages
+    if (error.status === 404) {
+      res.status(404).send(error.message);
+      return;
+    }
+    if (error.status === 403) {
+      res.status(403).send(error.message);
+      return;
+    }
     if (error.status === 409) {
       res.status(409).send(error.message);
       return;
