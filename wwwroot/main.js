@@ -78,7 +78,7 @@ async function setupBucketCreation(viewer) {
     showNotification(`Creating bucket <em>${bucketName}</em>. Please wait...`);
 
     try {
-      const resp = await fetch("/api/buckets/create", {
+      const resp = await fetch("/api/buckets", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

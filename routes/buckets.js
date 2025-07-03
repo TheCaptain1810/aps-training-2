@@ -17,7 +17,7 @@ router.get("/api/buckets", async (req, res, next) => {
   }
 });
 
-router.post("/api/buckets/create", async (req, res, next) => {
+router.post("/api/buckets", async (req, res, next) => {
   try {
     const { bucketName } = req.body;
     if (!bucketName) {
