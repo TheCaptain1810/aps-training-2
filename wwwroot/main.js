@@ -128,10 +128,59 @@ async function setupBucketCreation(viewer) {
       setUpBucketSelection(viewer, bucket.urn);
       input.value = ""; // Clear the input
     } catch (err) {
-      alert(
-        `Could not create bucket ${bucketName}. See the console for more details.`
-      );
-      console.error(err);
+      clearNotification();
+
+      // Show more user-friendly error messages based on the error type
+      let userMessage = `Could not create bucket "${bucketName}".`;
+      let offerAlternatives = false;
+
+      if (err.message.includes("already exists and is accessible")) {
+        userMessage +=
+          "\n\nThis bucket name is currently in use. Please choose a different name.";
+        offerAlternatives = true;
+      } else if (
+        err.message.includes("recently deleted and is temporarily unavailable")
+      ) {
+        userMessage +=
+          "\n\nThis bucket was recently deleted and the name is temporarily reserved. Please wait a few minutes and try again, or choose a different name.";
+        offerAlternatives = true;
+      } else if (
+        err.message.includes("already in use by another application")
+      ) {
+        userMessage +=
+          "\n\nThis bucket name is being used by another application or user. Please choose a different name.";
+        offerAlternatives = true;
+      } else if (err.message.includes("already exists")) {
+        userMessage +=
+          "\n\nThis bucket name is not available. Please choose a different name.";
+        offerAlternatives = true;
+      } else {
+        userMessage += `\n\nError: ${err.message}`;
+      }
+
+      // Offer to try alternative names for naming conflicts
+      if (offerAlternatives) {
+        userMessage +=
+          "\n\nWould you like to try creating a bucket with a similar name automatically?";
+
+        if (confirm(userMessage)) {
+          try {
+            showNotification("Trying alternative bucket names...");
+            await tryAlternativeBucketNames(bucketName, viewer);
+            return; // Success, exit the error handling
+          } catch (altError) {
+            clearNotification();
+            alert(
+              "Could not create bucket with any alternative names. Please try a completely different name."
+            );
+            console.error("Alternative names failed:", altError);
+          }
+        }
+      } else {
+        alert(userMessage);
+      }
+
+      console.error("Bucket creation error:", err);
     } finally {
       clearNotification();
       create.removeAttribute("disabled");
@@ -147,44 +196,61 @@ async function setupModelUpload(viewer) {
   upload.onclick = () => input.click();
   input.onchange = async () => {
     const file = input.files[0];
+
+    // Get the currently selected bucket
+    const bucketsDropdown = document.getElementById("buckets");
+    const selectedText = bucketsDropdown.querySelector(".selected-text");
+    const selectedOption = bucketsDropdown.querySelector(
+      ".dropdown-option.selected"
+    );
+
+    if (
+      !selectedOption ||
+      !selectedText ||
+      selectedText.textContent === "Select a bucket..." ||
+      selectedText.textContent === "No buckets available" ||
+      selectedText.textContent === "Error loading buckets"
+    ) {
+      alert("Please select a bucket before uploading a model.");
+      input.value = ""; // Clear the file input
+      return;
+    }
+
+    const selectedBucketUrn = selectedOption.dataset.urn;
+
     let data = new FormData();
     data.append("model-file", file);
+    data.append("bucket-urn", selectedBucketUrn); // Include the selected bucket
+
     if (file.name.endsWith(".zip")) {
       // When uploading a zip file, ask for the main design file in the archive
       const entrypoint = window.prompt(
         "Please enter the filename of the main design inside the archive."
       );
+      if (!entrypoint) {
+        input.value = ""; // Clear the file input if user cancels
+        return;
+      }
       data.append("model-zip-entrypoint", entrypoint);
     }
+
     upload.setAttribute("disabled", "true");
     models.setAttribute("disabled", "true");
     showNotification(
-      `Uploading model <em>${file.name}</em>. Do not reload the page.`
+      `Uploading model <em>${file.name}</em> to bucket <em>${selectedText.textContent}</em>. Do not reload the page.`
     );
+
     try {
       const resp = await fetch("/api/models", { method: "POST", body: data });
       if (!resp.ok) {
         throw new Error(await resp.text());
       }
-      const model = await resp.json();
+
+      // Model uploaded successfully, refresh the bucket view
+      await resp.json(); // Consume the response
+
       // Refresh the currently selected bucket to show the new model
-      const bucketsDropdown = document.getElementById("buckets");
-      const selectedText = bucketsDropdown.querySelector(".selected-text");
-      if (
-        selectedText &&
-        selectedText.textContent !== "Select a bucket..." &&
-        selectedText.textContent !== "No buckets available"
-      ) {
-        // Get the current selected bucket URN and refresh it
-        const selectedOption = bucketsDropdown.querySelector(
-          ".dropdown-option.selected"
-        );
-        if (selectedOption) {
-          onBucketSelected(viewer, selectedOption.dataset.urn);
-        }
-      } else {
-        setupModelSelection(viewer, model.urn);
-      }
+      onBucketSelected(viewer, selectedBucketUrn);
     } catch (err) {
       alert(
         `Could not upload model ${file.name}. See the console for more details.`
@@ -391,6 +457,50 @@ function handleDropdownKeydown(event) {
     dropdown.classList.remove("open");
     dropdownSelected.setAttribute("aria-expanded", "false");
   }
+}
+
+// Helper function to suggest and try alternative bucket names
+async function tryAlternativeBucketNames(baseName, viewer) {
+  const timestamp = Date.now().toString().slice(-4);
+  const alternatives = [
+    `${baseName}-${timestamp}`,
+    `${baseName}-v2`,
+    `${baseName}-new`,
+    `${baseName}-${Math.floor(Math.random() * 1000)}`,
+  ];
+
+  for (const altName of alternatives) {
+    try {
+      const resp = await fetch("/api/buckets/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ bucketName: altName }),
+      });
+
+      if (resp.ok) {
+        const bucket = await resp.json();
+        setUpBucketSelection(viewer, bucket.urn);
+
+        showNotification(`Bucket created successfully with name: ${altName}`);
+        setTimeout(clearNotification, 3000);
+
+        // Update the input field with the successful name
+        document.getElementById("bucket").value = "";
+        return altName;
+      }
+    } catch (error) {
+      // Continue trying other alternatives
+      console.warn(
+        `Failed to create bucket with name ${altName}:`,
+        error.message
+      );
+      continue;
+    }
+  }
+
+  throw new Error("Could not create bucket with any alternative names");
 }
 
 // Make functions globally accessible for HTML onclick handlers

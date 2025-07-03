@@ -6,6 +6,7 @@ const {
   translateObject,
   getManifest,
   urnify,
+  deurnify,
 } = require("../services/aps.js");
 
 let router = express.Router();
@@ -17,7 +18,7 @@ router.get("/api/models", async (req, res, next) => {
 
     if (bucketUrn) {
       // Decode the bucket URN to get the bucket name
-      const bucketName = Buffer.from(bucketUrn, "base64").toString();
+      const bucketName = deurnify(bucketUrn);
       objects = await listObjects(bucketName);
     } else {
       // Default behavior - list objects from default bucket
@@ -72,15 +73,26 @@ router.post(
       res.status(400).send("The required field 'model-file' is missing.");
       return;
     }
+
     try {
-      const obj = await uploadObject(file.name, file.path);
+      let bucketName;
+
+      // Check if a specific bucket URN was provided
+      if (req.fields["bucket-urn"]) {
+        // Decode the bucket URN to get the bucket name
+        bucketName = deurnify(req.fields["bucket-urn"]);
+        console.log(`Uploading to bucket: ${bucketName}`);
+      }
+
+      // Upload to the specified bucket (or default if none specified)
+      const obj = await uploadObject(file.name, file.path, bucketName);
       await translateObject(
         urnify(obj.objectId),
         req.fields["model-zip-entrypoint"]
       );
       res.json({
         name: obj.objectKey,
-        urn: urnify(obj.objectId), // Fix: should be obj.objectId, not obj.objectKey
+        urn: urnify(obj.objectId),
       });
     } catch (error) {
       next(error);

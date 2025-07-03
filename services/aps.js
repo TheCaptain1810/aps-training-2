@@ -109,13 +109,41 @@ service.createBucket = async (bucketName) => {
     );
     return bucket;
   } catch (error) {
-    // If bucket already exists, throw a meaningful error instead of auto-generating names
+    // If bucket already exists, provide detailed information
     if (error.axiosError?.response?.status === 409) {
-      const conflictError = new Error(
-        `Bucket name '${bucketName}' already exists. Please choose a different name.`
-      );
-      conflictError.status = 409;
-      throw conflictError;
+      // Check if the bucket actually exists or if it's just a naming conflict
+      try {
+        await ossClient.getBucketDetails(bucketName, { accessToken });
+        // Bucket exists and is accessible
+        const conflictError = new Error(
+          `Bucket name '${bucketName}' already exists and is accessible. Please choose a different name.`
+        );
+        conflictError.status = 409;
+        throw conflictError;
+      } catch (detailError) {
+        if (detailError.axiosError?.response?.status === 404) {
+          // Bucket doesn't exist but name is still reserved (recently deleted)
+          const reservedError = new Error(
+            `Bucket name '${bucketName}' was recently deleted and is temporarily unavailable. Please wait a few minutes and try again, or choose a different name.`
+          );
+          reservedError.status = 409;
+          throw reservedError;
+        } else if (detailError.axiosError?.response?.status === 403) {
+          // Bucket exists but belongs to another app/user
+          const accessError = new Error(
+            `Bucket name '${bucketName}' is already in use by another application or user. Please choose a different name.`
+          );
+          accessError.status = 409;
+          throw accessError;
+        } else {
+          // Some other error occurred while checking bucket details
+          const unknownError = new Error(
+            `Bucket name '${bucketName}' conflicts with an existing bucket. Please choose a different name.`
+          );
+          unknownError.status = 409;
+          throw unknownError;
+        }
+      }
     }
     throw error;
   }
@@ -170,6 +198,12 @@ service.getManifest = async (urn) => {
 };
 
 service.urnify = (id) => Buffer.from(id).toString("base64").replace(/=/g, "");
+
+service.deurnify = (urn) => {
+  // Add padding if needed for proper base64 decoding
+  const paddedUrn = urn + "=".repeat((4 - (urn.length % 4)) % 4);
+  return Buffer.from(paddedUrn, "base64").toString();
+};
 
 service.deleteBucket = async (bucketName) => {
   const accessToken = await getInternalToken();
@@ -268,4 +302,16 @@ function handleDeletionError(error, bucketName) {
   );
   genericError.status = status || 500;
   throw genericError;
+}
+
+// Helper function to suggest alternative bucket names
+function suggestAlternativeBucketName(originalName) {
+  const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+  const alternatives = [
+    `${originalName}-${timestamp}`,
+    `${originalName}-v2`,
+    `${originalName}-new`,
+    `${originalName}-${Math.floor(Math.random() * 1000)}`,
+  ];
+  return alternatives;
 }

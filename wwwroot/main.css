@@ -182,17 +182,3 @@ html {
   opacity: 0.5;
   pointer-events: none;
 }
-
-.help-text {
-  background-color: #f8f9fa;
-  border-left: 4px solid #17a2b8;
-  padding: 8px 16px;
-  margin: 0;
-  font-size: 0.9em;
-  color: #495057;
-}
-
-.help-text small {
-  display: block;
-  line-height: 1.4;
-}
