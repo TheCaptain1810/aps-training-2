@@ -1,9 +1,10 @@
 import { initViewer, loadModel } from "./viewer.js";
 
 initViewer(document.getElementById("preview")).then((viewer) => {
-  window.viewer = viewer; // Store viewer globally for delete function access
+  window.viewer = viewer;
   const urn = window.location.hash?.substring(1);
   setUpBucketSelection(viewer, urn);
+  setupModelSelection(viewer, urn);
   setupModelUpload(viewer);
   setupBucketCreation(viewer);
 });
@@ -22,13 +23,11 @@ async function setUpBucketSelection(viewer, selectedUrn) {
     }
     const buckets = await resp.json();
 
-    // Update selected text
     if (buckets.length === 0) {
       selectedText.textContent = "No buckets available";
       return;
     }
 
-    // Create dropdown options with delete buttons
     dropdownOptions.innerHTML = buckets
       .map(
         (bucket) =>
@@ -49,21 +48,19 @@ async function setUpBucketSelection(viewer, selectedUrn) {
       )
       .join("\n");
 
-    // Set selected text
     const selectedBucket = buckets.find((b) => b.urn === selectedUrn);
     if (selectedBucket) {
       selectedText.textContent = selectedBucket.name;
-      selectedText.title = selectedBucket.name; // Add tooltip for truncated names
+      selectedText.title = selectedBucket.name;
       onBucketSelected(viewer, selectedUrn);
     } else if (buckets.length > 0) {
-      // Auto-select first bucket if no selection
       const firstBucket = buckets[0];
       selectedText.textContent = firstBucket.name;
-      selectedText.title = firstBucket.name; // Add tooltip for truncated names
+      selectedText.title = firstBucket.name;
       onBucketSelected(viewer, firstBucket.urn);
     } else {
       selectedText.textContent = "Select a bucket...";
-      selectedText.title = ""; // Clear tooltip
+      selectedText.title = "";
     }
   } catch (err) {
     selectedText.textContent = "Error loading buckets";
@@ -112,7 +109,6 @@ async function setupBucketCreation(viewer) {
     }
 
     create.setAttribute("disabled", "true");
-    // Disable dropdown by adding a disabled class instead of attribute
     buckets.classList.add("disabled");
     showNotification(`Creating bucket <em>${bucketName}</em>. Please wait...`);
 
@@ -131,60 +127,9 @@ async function setupBucketCreation(viewer) {
 
       const bucket = await resp.json();
       setUpBucketSelection(viewer, bucket.urn);
-      input.value = ""; // Clear the input
+      input.value = "";
     } catch (err) {
       clearNotification();
-
-      // Show more user-friendly error messages based on the error type
-      let userMessage = `Could not create bucket "${bucketName}".`;
-      let offerAlternatives = false;
-
-      if (err.message.includes("already exists and is accessible")) {
-        userMessage +=
-          "\n\nThis bucket name is currently in use. Please choose a different name.";
-        offerAlternatives = true;
-      } else if (
-        err.message.includes("recently deleted and is temporarily unavailable")
-      ) {
-        userMessage +=
-          "\n\nThis bucket was recently deleted and the name is temporarily reserved. Please wait a few minutes and try again, or choose a different name.";
-        offerAlternatives = true;
-      } else if (
-        err.message.includes("already in use by another application")
-      ) {
-        userMessage +=
-          "\n\nThis bucket name is being used by another application or user. Please choose a different name.";
-        offerAlternatives = true;
-      } else if (err.message.includes("already exists")) {
-        userMessage +=
-          "\n\nThis bucket name is not available. Please choose a different name.";
-        offerAlternatives = true;
-      } else {
-        userMessage += `\n\nError: ${err.message}`;
-      }
-
-      // Offer to try alternative names for naming conflicts
-      if (offerAlternatives) {
-        userMessage +=
-          "\n\nWould you like to try creating a bucket with a similar name automatically?";
-
-        if (confirm(userMessage)) {
-          try {
-            showNotification("Trying alternative bucket names...");
-            await tryAlternativeBucketNames(bucketName, viewer);
-            return; // Success, exit the error handling
-          } catch (altError) {
-            clearNotification();
-            alert(
-              "Could not create bucket with any alternative names. Please try a completely different name."
-            );
-            console.error("Alternative names failed:", altError);
-          }
-        }
-      } else {
-        alert(userMessage);
-      }
-
       console.error("Bucket creation error:", err);
     } finally {
       clearNotification();
@@ -251,10 +196,7 @@ async function setupModelUpload(viewer) {
         throw new Error(await resp.text());
       }
 
-      // Model uploaded successfully, refresh the bucket view
-      await resp.json(); // Consume the response
-
-      // Refresh the currently selected bucket to show the new model
+      await resp.json();
       onBucketSelected(viewer, selectedBucketUrn);
     } catch (err) {
       alert(
@@ -271,7 +213,6 @@ async function setupModelUpload(viewer) {
 }
 
 async function onBucketSelected(viewer, bucketUrn) {
-  // When a bucket is selected, refresh the models dropdown to show models from that bucket
   try {
     const resp = await fetch(
       `/api/models?bucket=${encodeURIComponent(bucketUrn)}`
@@ -285,12 +226,10 @@ async function onBucketSelected(viewer, bucketUrn) {
       .map((model) => `<option value=${model.urn}>${model.name}</option>`)
       .join("\n");
 
-    // Clear any existing model selection
     if (models.length === 0) {
       showNotification("No models found in this bucket.");
     } else {
       clearNotification();
-      // Optionally select the first model
       if (modelsDropdown.value) {
         onModelSelected(viewer, modelsDropdown.value);
       }
@@ -383,8 +322,7 @@ async function deleteBucket(bucketName) {
       throw new Error(errorMessage);
     }
 
-    // Refresh the bucket list after successful deletion
-    const viewer = window.viewer; // Assuming viewer is accessible globally
+    const viewer = window.viewer;
     setUpBucketSelection(viewer);
 
     clearNotification();
@@ -392,23 +330,7 @@ async function deleteBucket(bucketName) {
     setTimeout(clearNotification, 3000);
   } catch (err) {
     clearNotification();
-
-    // Show more user-friendly error messages based on the error type
-    let userMessage = `Could not delete bucket "${bucketName}".`;
-
-    if (err.message.includes("Permission denied")) {
-      userMessage +=
-        "\n\nThis bucket was likely created by another application or user. You can only delete buckets that you created with this app.";
-    } else if (err.message.includes("not empty")) {
-      userMessage +=
-        "\n\nThe bucket contains objects that need to be deleted first.";
-    } else if (err.message.includes("not found")) {
-      userMessage += "\n\nThe bucket no longer exists.";
-    } else {
-      userMessage += `\n\nError: ${err.message}`;
-    }
-
-    alert(userMessage);
+    alert(err.message);
     console.error("Bucket deletion error:", err);
   }
 }
@@ -422,7 +344,6 @@ function toggleDropdown() {
 
   dropdown.classList.toggle("open");
 
-  // Update aria-expanded attribute
   dropdownSelected.setAttribute("aria-expanded", !isOpen);
 }
 
@@ -433,11 +354,9 @@ function selectBucket(urn, name) {
   const selectedText = dropdown.querySelector(".selected-text");
   const options = dropdown.querySelectorAll(".dropdown-option");
 
-  // Update selected text
   selectedText.textContent = name;
-  selectedText.title = name; // Add tooltip for truncated names
+  selectedText.title = name;
 
-  // Update selected option
   options.forEach((option) => {
     option.classList.remove("selected");
     if (option.dataset.urn === urn) {
@@ -445,11 +364,9 @@ function selectBucket(urn, name) {
     }
   });
 
-  // Close dropdown
   dropdown.classList.remove("open");
   dropdownSelected.setAttribute("aria-expanded", "false");
 
-  // Trigger bucket selection
   onBucketSelected(window.viewer, urn);
 }
 
@@ -465,57 +382,11 @@ function handleDropdownKeydown(event) {
   }
 }
 
-// Helper function to suggest and try alternative bucket names
-async function tryAlternativeBucketNames(baseName, viewer) {
-  const timestamp = Date.now().toString().slice(-4);
-  const alternatives = [
-    `${baseName}-${timestamp}`,
-    `${baseName}-v2`,
-    `${baseName}-new`,
-    `${baseName}-${Math.floor(Math.random() * 1000)}`,
-  ];
-
-  for (const altName of alternatives) {
-    try {
-      const resp = await fetch("/api/buckets/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ bucketName: altName }),
-      });
-
-      if (resp.ok) {
-        const bucket = await resp.json();
-        setUpBucketSelection(viewer, bucket.urn);
-
-        showNotification(`Bucket created successfully with name: ${altName}`);
-        setTimeout(clearNotification, 3000);
-
-        // Update the input field with the successful name
-        document.getElementById("bucket").value = "";
-        return altName;
-      }
-    } catch (error) {
-      // Continue trying other alternatives
-      console.warn(
-        `Failed to create bucket with name ${altName}:`,
-        error.message
-      );
-      continue;
-    }
-  }
-
-  throw new Error("Could not create bucket with any alternative names");
-}
-
-// Make functions globally accessible for HTML onclick handlers
 window.toggleDropdown = toggleDropdown;
 window.selectBucket = selectBucket;
 window.handleDropdownKeydown = handleDropdownKeydown;
 window.deleteBucket = deleteBucket;
 
-// Close dropdown when clicking outside
 document.addEventListener("click", function (event) {
   const dropdown = document.getElementById("buckets");
   if (dropdown && !dropdown.contains(event.target)) {

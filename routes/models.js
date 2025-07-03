@@ -17,11 +17,9 @@ router.get("/api/models", async (req, res, next) => {
     let objects;
 
     if (bucketUrn) {
-      // Decode the bucket URN to get the bucket name
       const bucketName = deurnify(bucketUrn);
       objects = await listObjects(bucketName);
     } else {
-      // Default behavior - list objects from default bucket
       objects = await listObjects();
     }
 
@@ -77,14 +75,11 @@ router.post(
     try {
       let bucketName;
 
-      // Check if a specific bucket URN was provided
       if (req.fields["bucket-urn"]) {
-        // Decode the bucket URN to get the bucket name
         bucketName = deurnify(req.fields["bucket-urn"]);
         console.log(`Uploading to bucket: ${bucketName}`);
       }
 
-      // Upload to the specified bucket (or default if none specified)
       const obj = await uploadObject(file.name, file.path, bucketName);
       await translateObject(
         urnify(obj.objectId),

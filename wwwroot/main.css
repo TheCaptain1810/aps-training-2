@@ -60,8 +60,8 @@ html {
 
 .custom-dropdown {
   position: relative;
-  flex: 0 0 auto; /* Changed from flex: 0 1 auto to prevent shrinking/growing */
-  width: 200px; /* Fixed width instead of min-width */
+  flex: 0 0 auto;
+  width: 200px;
   height: 2em;
   margin: 0 0.5em;
 }
@@ -95,7 +95,7 @@ html {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  max-width: 160px; /* Ensure there's always space for the arrow */
+  max-width: 160px;
 }
 
 .option-name {
@@ -103,7 +103,7 @@ html {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  max-width: 140px; /* Ensure there's always space for the delete button */
+  max-width: 140px;
 }
 
 .delete-btn {
@@ -141,7 +141,7 @@ html {
   margin-left: 8px;
   font-size: 12px;
   transition: transform 0.2s;
-  flex-shrink: 0; /* Prevent arrow from shrinking */
+  flex-shrink: 0;
 }
 
 .custom-dropdown.open .dropdown-arrow {

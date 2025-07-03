@@ -14,7 +14,7 @@ router.get("/api/buckets", async (req, res, next) => {
     res.json(
       buckets.map((bucket) => ({
         name: bucket.bucketKey,
-        urn: urnify(bucket.bucketKey), // Add URN for frontend compatibility
+        urn: urnify(bucket.bucketKey),
       }))
     );
   } catch (error) {
@@ -30,15 +30,12 @@ router.post("/api/buckets/create", async (req, res, next) => {
       return;
     }
 
-    // Use the user's bucket name with minimal sanitization for APS requirements
-    // APS bucket names must be 3-128 chars, lowercase, alphanumeric and hyphens only
     let sanitizedBucketName = bucketName
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "") // Remove invalid characters
-      .replace(/^[^a-z0-9]+/, "") // Remove leading non-alphanumeric
-      .replace(/[^a-z0-9]+$/, ""); // Remove trailing non-alphanumeric
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/^[^a-z0-9]+/, "")
+      .replace(/[^a-z0-9]+$/, "");
 
-    // Ensure minimum length
     if (sanitizedBucketName.length < 3) {
       res
         .status(400)
@@ -48,7 +45,6 @@ router.post("/api/buckets/create", async (req, res, next) => {
       return;
     }
 
-    // Ensure maximum length
     if (sanitizedBucketName.length > 128) {
       sanitizedBucketName = sanitizedBucketName.substring(0, 128);
     }
@@ -60,7 +56,6 @@ router.post("/api/buckets/create", async (req, res, next) => {
       urn: urnify(sanitizedBucketName),
     });
   } catch (error) {
-    // Handle bucket name conflicts with a user-friendly message
     if (error.status === 409) {
       res.status(409).send(error.message);
       return;
@@ -77,30 +72,17 @@ router.delete("/api/buckets", async (req, res, next) => {
       return;
     }
 
-    // Use the user's bucket name with minimal sanitization for APS requirements
     let sanitizedBucketName = bucketName
       .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "") // Remove invalid characters
-      .replace(/^[^a-z0-9]+/, "") // Remove leading non-alphanumeric
-      .replace(/[^a-z0-9]+$/, ""); // Remove trailing non-alphanumeric
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/^[^a-z0-9]+/, "")
+      .replace(/[^a-z0-9]+$/, "");
 
     const result = await deleteBucket(sanitizedBucketName);
 
     res.json(result);
   } catch (error) {
-    // Handle specific error statuses with user-friendly messages
-    if (error.status === 404) {
-      res.status(404).send(error.message);
-      return;
-    }
-    if (error.status === 403) {
-      res.status(403).send(error.message);
-      return;
-    }
-    if (error.status === 409) {
-      res.status(409).send(error.message);
-      return;
-    }
+    res.send(error.message);
     next(error);
   }
 });
