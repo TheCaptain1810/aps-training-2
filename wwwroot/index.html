@@ -25,9 +25,12 @@
         alt="Autodesk Platform Services"
       />
       <span class="title">Simple Viewer</span>
-      <select name="models" id="models"></select>
+      <input type="text" placeholder="Enter the bucket name" id="bucket" />
+      <button id="create" title="Create Bucket">Create</button>
+      <select name="buckets" id="buckets"></select>
       <button id="upload" title="Upload New Model">Upload</button>
       <input style="display: none" type="file" id="input" />
+      <select name="models" id="models"></select>
     </div>
     <div id="preview"></div>
     <div id="overlay"></div>

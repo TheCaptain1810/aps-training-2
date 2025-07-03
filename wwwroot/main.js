@@ -2,9 +2,37 @@ import { initViewer, loadModel } from "./viewer.js";
 
 initViewer(document.getElementById("preview")).then((viewer) => {
   const urn = window.location.hash?.substring(1);
-  setupModelSelection(viewer, urn);
+  setUpBucketSelection(viewer, urn);
   setupModelUpload(viewer);
+  setupBucketCreation(viewer);
 });
+
+async function setUpBucketSelection(viewer, selectedUrn) {
+  const dropdown = document.getElementById("buckets");
+  dropdown.innerHTML = "";
+  try {
+    const resp = await fetch("/api/buckets");
+    if (!resp.ok) {
+      throw new Error(await resp.text());
+    }
+    const buckets = await resp.json();
+    dropdown.innerHTML = buckets
+      .map(
+        (bucket) =>
+          `<option value=${bucket.urn} ${
+            bucket.urn === selectedUrn ? "selected" : ""
+          }>${bucket.name}</option>`
+      )
+      .join("\n");
+    dropdown.onchange = () => onBucketSelected(viewer, dropdown.value);
+    if (dropdown.value) {
+      onBucketSelected(viewer, dropdown.value);
+    }
+  } catch (err) {
+    alert("Could not list buckets. See the console for more details.");
+    console.error(err);
+  }
+}
 
 async function setupModelSelection(viewer, selectedUrn) {
   const dropdown = document.getElementById("models");
@@ -31,6 +59,51 @@ async function setupModelSelection(viewer, selectedUrn) {
     alert("Could not list models. See the console for more details.");
     console.error(err);
   }
+}
+
+async function setupBucketCreation(viewer) {
+  const create = document.getElementById("create");
+  const input = document.getElementById("bucket");
+  const buckets = document.getElementById("buckets");
+
+  create.onclick = async () => {
+    const bucketName = input.value.trim();
+    if (!bucketName) {
+      alert("Please enter a bucket name.");
+      return;
+    }
+
+    create.setAttribute("disabled", "true");
+    buckets.setAttribute("disabled", "true");
+    showNotification(`Creating bucket <em>${bucketName}</em>. Please wait...`);
+
+    try {
+      const resp = await fetch("/api/buckets/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ bucketName: bucketName }),
+      });
+
+      if (!resp.ok) {
+        throw new Error(await resp.text());
+      }
+
+      const bucket = await resp.json();
+      setUpBucketSelection(viewer, bucket.urn);
+      input.value = ""; // Clear the input
+    } catch (err) {
+      alert(
+        `Could not create bucket ${bucketName}. See the console for more details.`
+      );
+      console.error(err);
+    } finally {
+      clearNotification();
+      create.removeAttribute("disabled");
+      buckets.removeAttribute("disabled");
+    }
+  };
 }
 
 async function setupModelUpload(viewer) {
@@ -60,7 +133,13 @@ async function setupModelUpload(viewer) {
         throw new Error(await resp.text());
       }
       const model = await resp.json();
-      setupModelSelection(viewer, model.urn);
+      // Refresh the currently selected bucket to show the new model
+      const bucketsDropdown = document.getElementById("buckets");
+      if (bucketsDropdown.value) {
+        onBucketSelected(viewer, bucketsDropdown.value);
+      } else {
+        setupModelSelection(viewer, model.urn);
+      }
     } catch (err) {
       alert(
         `Could not upload model ${file.name}. See the console for more details.`
@@ -73,6 +152,39 @@ async function setupModelUpload(viewer) {
       input.value = "";
     }
   };
+}
+
+async function onBucketSelected(viewer, bucketUrn) {
+  // When a bucket is selected, refresh the models dropdown to show models from that bucket
+  try {
+    const resp = await fetch(
+      `/api/models?bucket=${encodeURIComponent(bucketUrn)}`
+    );
+    if (!resp.ok) {
+      throw new Error(await resp.text());
+    }
+    const models = await resp.json();
+    const modelsDropdown = document.getElementById("models");
+    modelsDropdown.innerHTML = models
+      .map((model) => `<option value=${model.urn}>${model.name}</option>`)
+      .join("\n");
+
+    // Clear any existing model selection
+    if (models.length === 0) {
+      showNotification("No models found in this bucket.");
+    } else {
+      clearNotification();
+      // Optionally select the first model
+      if (modelsDropdown.value) {
+        onModelSelected(viewer, modelsDropdown.value);
+      }
+    }
+  } catch (err) {
+    alert(
+      "Could not list models for this bucket. See the console for more details."
+    );
+    console.error(err);
+  }
 }
 
 async function onModelSelected(viewer, urn) {

@@ -12,7 +12,18 @@ let router = express.Router();
 
 router.get("/api/models", async (req, res, next) => {
   try {
-    const objects = await listObjects();
+    const bucketUrn = req.query.bucket;
+    let objects;
+
+    if (bucketUrn) {
+      // Decode the bucket URN to get the bucket name
+      const bucketName = Buffer.from(bucketUrn, "base64").toString();
+      objects = await listObjects(bucketName);
+    } else {
+      // Default behavior - list objects from default bucket
+      objects = await listObjects();
+    }
+
     res.json(
       objects.map((obj) => ({
         name: obj.objectKey,
@@ -69,7 +80,7 @@ router.post(
       );
       res.json({
         name: obj.objectKey,
-        urn: urnify(obj.objectKey),
+        urn: urnify(obj.objectId), // Fix: should be obj.objectId, not obj.objectKey
       });
     } catch (error) {
       next(error);

@@ -5,11 +5,9 @@ const {
   View,
   OutputType,
 } = require("@aps_sdk/model-derivative");
-const {
-  APS_CLIENT_ID,
-  APS_CLIENT_SECRET,
-  APS_BUCKET,
-} = require("../config.js");
+const { APS_CLIENT_ID, APS_CLIENT_SECRET } = require("../config.js");
+
+const APS_BUCKET = `the-captain-basic-app`;
 
 const authenticationClient = new AuthenticationClient();
 const ossClient = new OssClient();
@@ -57,17 +55,37 @@ service.ensureBucketExists = async (bucketKey) => {
   }
 };
 
-service.listObjects = async () => {
-  await service.ensureBucketExists(APS_BUCKET);
+service.listBuckets = async () => {
   const accessToken = await getInternalToken();
-  let response = await ossClient.getObjects(APS_BUCKET, {
+  let response = await ossClient.getBuckets({
+    limit: 64,
+    accessToken,
+  });
+  let buckets = response.items;
+  while (response.next) {
+    const startAt = new URL(response.next).searchParams.get("startAt");
+    response = await ossClient.getBuckets({
+      limit: 64,
+      startAt,
+      accessToken,
+    });
+    buckets = buckets.concat(response.items);
+  }
+  console.log("Buckets:", buckets);
+  return buckets;
+};
+
+service.listObjects = async (bucketKey = APS_BUCKET) => {
+  await service.ensureBucketExists(bucketKey);
+  const accessToken = await getInternalToken();
+  let response = await ossClient.getObjects(bucketKey, {
     limit: 64,
     accessToken,
   });
   let objects = response.items;
   while (response.next) {
     const startAt = new URL(response.next).searchParams.get("startAt");
-    response = await ossClient.getObjects(APS_BUCKET, {
+    response = await ossClient.getObjects(bucketKey, {
       limit: 64,
       startAt,
       accessToken,
@@ -77,10 +95,34 @@ service.listObjects = async () => {
   return objects;
 };
 
-service.uploadObject = async (objectName, filePath) => {
-  await service.ensureBucketExists(APS_BUCKET);
+service.createBucket = async (bucketName) => {
   const accessToken = await getInternalToken();
-  const obj = await ossClient.uploadObject(APS_BUCKET, objectName, filePath, {
+
+  // Use the bucket name as provided - validation should be done at the route level
+  try {
+    const bucket = await ossClient.createBucket(
+      Region.Us,
+      { bucketKey: bucketName, policyKey: PolicyKey.Persistent },
+      { accessToken }
+    );
+    return bucket;
+  } catch (error) {
+    // If bucket already exists, throw a meaningful error instead of auto-generating names
+    if (error.axiosError?.response?.status === 409) {
+      const conflictError = new Error(
+        `Bucket name '${bucketName}' already exists. Please choose a different name.`
+      );
+      conflictError.status = 409;
+      throw conflictError;
+    }
+    throw error;
+  }
+};
+
+service.uploadObject = async (objectName, filePath, bucketKey = APS_BUCKET) => {
+  await service.ensureBucketExists(bucketKey);
+  const accessToken = await getInternalToken();
+  const obj = await ossClient.uploadObject(bucketKey, objectName, filePath, {
     accessToken,
   });
   return obj;
