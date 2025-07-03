@@ -36,8 +36,10 @@ async function setUpBucketSelection(viewer, selectedUrn) {
             bucket.urn === selectedUrn ? "selected" : ""
           }" data-urn="${bucket.urn}" onclick="selectBucket('${bucket.urn}', '${
             bucket.name
-          }')" role="option" tabindex="-1">
-            <span class="option-name">${bucket.name}</span>
+          }')" role="option" tabindex="-1" title="${bucket.name}">
+            <span class="option-name" title="${bucket.name}">${
+            bucket.name
+          }</span>
             <button class="delete-btn" onclick="event.stopPropagation(); deleteBucket('${
               bucket.name
             }')" title="Delete bucket (Note: Only buckets created by this app can be deleted)" aria-label="Delete bucket ${
@@ -51,14 +53,17 @@ async function setUpBucketSelection(viewer, selectedUrn) {
     const selectedBucket = buckets.find((b) => b.urn === selectedUrn);
     if (selectedBucket) {
       selectedText.textContent = selectedBucket.name;
+      selectedText.title = selectedBucket.name; // Add tooltip for truncated names
       onBucketSelected(viewer, selectedUrn);
     } else if (buckets.length > 0) {
       // Auto-select first bucket if no selection
       const firstBucket = buckets[0];
       selectedText.textContent = firstBucket.name;
+      selectedText.title = firstBucket.name; // Add tooltip for truncated names
       onBucketSelected(viewer, firstBucket.urn);
     } else {
       selectedText.textContent = "Select a bucket...";
+      selectedText.title = ""; // Clear tooltip
     }
   } catch (err) {
     selectedText.textContent = "Error loading buckets";
@@ -430,6 +435,7 @@ function selectBucket(urn, name) {
 
   // Update selected text
   selectedText.textContent = name;
+  selectedText.title = name; // Add tooltip for truncated names
 
   // Update selected option
   options.forEach((option) => {

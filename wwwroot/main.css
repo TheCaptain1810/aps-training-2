@@ -60,8 +60,8 @@ html {
 
 .custom-dropdown {
   position: relative;
-  flex: 0 1 auto;
-  min-width: 200px;
+  flex: 0 0 auto; /* Changed from flex: 0 1 auto to prevent shrinking/growing */
+  width: 200px; /* Fixed width instead of min-width */
   height: 2em;
   margin: 0 0.5em;
 }
@@ -95,12 +95,53 @@ html {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+  max-width: 160px; /* Ensure there's always space for the arrow */
+}
+
+.option-name {
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 140px; /* Ensure there's always space for the delete button */
+}
+
+.delete-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: background-color 0.2s;
+}
+
+.delete-btn:hover {
+  background: #c82333;
+}
+
+.dropdown-option.selected .delete-btn {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dropdown-option.selected .delete-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.custom-dropdown.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .dropdown-arrow {
   margin-left: 8px;
   font-size: 12px;
   transition: transform 0.2s;
+  flex-shrink: 0; /* Prevent arrow from shrinking */
 }
 
 .custom-dropdown.open .dropdown-arrow {
@@ -143,42 +184,4 @@ html {
 .dropdown-option.selected {
   background-color: #007acc;
   color: white;
-}
-
-.option-name {
-  flex: 1;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.delete-btn {
-  background: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  margin-left: 8px;
-  transition: background-color 0.2s;
-}
-
-.delete-btn:hover {
-  background: #c82333;
-}
-
-.dropdown-option.selected .delete-btn {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.dropdown-option.selected .delete-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.custom-dropdown.disabled {
-  opacity: 0.5;
-  pointer-events: none;
 }
